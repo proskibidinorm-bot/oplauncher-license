@@ -45,31 +45,28 @@ app.add_middleware(
 
 
 def init_db():
+    import os
     Base.metadata.create_all(bind=engine)
     db = SessionLocal()
     try:
+        bootstrap = os.environ.get("ADMIN_KEY", "").strip()
         existing = db.query(AdminKey).first()
-        if not existing:
-            raw_admin = "ADM-" + secrets.token_urlsafe(32)
-            ak = AdminKey(key_hash=hash_key(raw_admin))
-            db.add(ak)
+        if bootstrap:
+            h = hash_key(bootstrap)
+            if existing:
+                existing.key_hash = h
+            else:
+                db.add(AdminKey(key_hash=h))
             db.commit()
-            # Write once to a protected file so the owner can retrieve it
-            path = "ADMIN_KEY.txt"
-            with open(path, "w") as f:
-                f.write(
-                    "# OpLauncher Admin Key — KEEP SECRET\n"
-                    "# Generated on first server start. Delete this file after copying.\n"
-                    f"{raw_admin}\n"
-                )
-            try:
-                import os
-                os.chmod(path, 0o600)
-            except Exception:
-                pass
+            print("Admin key set from ADMIN_KEY env")
+        elif not existing:
+            raw_admin = "ADM-" + secrets.token_urlsafe(32)
+            db.add(AdminKey(key_hash=hash_key(raw_admin)))
+            db.commit()
+            with open("ADMIN_KEY.txt", "w") as f:
+                f.write(raw_admin + "\n")
             print("=" * 60)
-            print("ADMIN KEY GENERATED (also written to ADMIN_KEY.txt):")
-            print(raw_admin)
+            print("ADMIN KEY GENERATED:", raw_admin)
             print("=" * 60)
         else:
             print("Admin key already exists in DB (hash only).")
